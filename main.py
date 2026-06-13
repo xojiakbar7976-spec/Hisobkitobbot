@@ -2,7 +2,7 @@ import os
 import logging
 import threading
 from flask import Flask
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
     MessageHandler, filters, ContextTypes, ConversationHandler,
@@ -28,6 +28,15 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 WAIT_AMOUNT = 0
+
+MENU_KEYBOARD = ReplyKeyboardMarkup(
+    [
+        ["📊 Hisobot", "💳 Barcha qarzlar"],
+        ["➕ Sotuv kiritish", "📢 Eslatma"],
+        ["ℹ️ Yordam"],
+    ],
+    resize_keyboard=True,
+)
 
 
 def fm(n):
@@ -61,11 +70,52 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/barchaqarz — hammaning qarzi\n\n"
         "💡 A = Alisher aka | N … = Nazarbek | Dala … = Dala",
         parse_mode="Markdown",
+        reply_markup=MENU_KEYBOARD,
     )
+
+
+async def cmd_eslatma(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    balances = get_all_balances()
+    debtors = [b for b in balances if b["balance"] > 0]
+    if not debtors:
+        await update.message.reply_text("✅ Hech kimda qarz yo'q! Eslatma kerak emas.")
+        return
+
+    lines = ["📢 *Qarzdorlar eslatmasi:*\n"]
+    total = 0
+    for b in debtors:
+        lines.append("🔴 *" + b["name"] + ":* " + fm(b["balance"]))
+        total += b["balance"]
+    lines.append("\n💰 *Umumiy qarz:* " + fm(total))
+    lines.append("💡 Yuqoridagi mijozlardan qarzni undirishni unutmang!")
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
 async def handle_sale(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
+
+    # Menyu tugmalari
+    if "Hisobot" in text:
+        return await cmd_hisobot(update, ctx)
+    if "Barcha qarzlar" in text:
+        return await cmd_barcha_qarz(update, ctx)
+    if "Eslatma" in text:
+        return await cmd_eslatma(update, ctx)
+    if "Yordam" in text:
+        return await cmd_start(update, ctx)
+    if "Sotuv kiritish" in text:
+        await update.message.reply_text(
+            "➕ *Sotuv kiritish:*\n\n"
+            "Quyidagi formatda yozing:\n"
+            "`N babls 10 x 60.000`\n"
+            "`Dala 40x12.000`\n"
+            "`A 75x6000`\n"
+            "`Mijoz ismi`\n\n"
+            "💡 Oxirgi qatorga mijoz ismini yozing.",
+            parse_mode="Markdown",
+        )
+        return
+
     result = parse_message(text)
 
     if result is None:
