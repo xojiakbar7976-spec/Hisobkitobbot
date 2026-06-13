@@ -128,6 +128,19 @@ def get_daily_report(day=None):
     return day, by_source, totals
 
 
+def get_recent_sales(limit=50):
+    conn = get_conn()
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute(
+        "SELECT date, client_name, source, label, quantity, price, total "
+        "FROM sales ORDER BY id DESC LIMIT %s",
+        (limit,)
+    )
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
 def get_all_balances():
     conn = get_conn()
     c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

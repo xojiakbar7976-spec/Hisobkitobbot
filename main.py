@@ -1,7 +1,6 @@
 import os
 import logging
 import threading
-from flask import Flask
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler,
@@ -298,12 +297,8 @@ async def cmd_barcha_qarz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 def run_flask():
-    flask_app = Flask(__name__)
-
-    @flask_app.route("/")
-    def health():
-        return "OK", 200
-
+    from web import create_app
+    flask_app = create_app()
     port = int(os.environ.get("PORT", 8080))
     flask_app.run(host="0.0.0.0", port=port)
 
