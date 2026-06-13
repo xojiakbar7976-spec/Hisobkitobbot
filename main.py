@@ -113,26 +113,76 @@ def capture_admin_if_needed(update: Update) -> None:
         log.info("Admin id saqlandi: %s", user.id)
 
 
-def group_menu_kb():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🌸 Bugungi gullar", callback_data="g:stock")],
-        [InlineKeyboardButton("🧾 Hisobot", callback_data="g:hist")],
-        [InlineKeyboardButton("💰 Jami qarzim", callback_data="g:debt")],
-    ])
+def client_menu_kb():
+    return ReplyKeyboardMarkup(
+        [
+            ["🌸 Bugungi gullar", "🧾 Hisobot"],
+            ["💰 Jami qarzim"],
+        ],
+        resize_keyboard=True,
+    )
 
 
 async def show_group_menu(update: Update):
     chat = update.effective_chat
     if chat:
         record_group(chat.id, chat.title)
-    # Admin reply-klaviaturasi guruhda qolib ketgan bo'lsa — olib tashlaymiz
-    try:
-        await update.message.reply_text("🌸 Mijoz menyusi", reply_markup=ReplyKeyboardRemove())
-    except TelegramError:
-        pass
     await update.message.reply_text(
-        "Kerakli bo'limni tanlang 👇", reply_markup=group_menu_kb()
+        "🌸 Mijoz menyusi — kerakli bo'limni tanlang 👇",
+        reply_markup=client_menu_kb(),
     )
+
+
+async def grp_show_flowers(ctx, chat, msg):
+    flowers = get_active_flowers()
+    if not flowers:
+        await msg.reply_text("📭 Bugungi gullar hali yo'q.")
+        return
+    for f in flowers:
+        cap = "🌸 Bugungi chiqgan gullar"
+        if f["caption"]:
+            cap += "\n" + f["caption"]
+        try:
+            await ctx.bot.send_photo(chat.id, f["file_id"], caption=cap)
+        except TelegramError:
+            continue
+
+
+async def grp_show_debt(ctx, chat, msg):
+    client = resolve_client_for_group(chat.id, chat.title)
+    if not client:
+        await msg.reply_text("⚠️ Bu guruh mijozga bog'lanmagan.\nAdmin «Mijoz: <ism>» deb yozsin.")
+        return
+    d = get_client_balance(client)
+    bal = d["balance"]
+    if bal > 0:
+        txt = "👤 " + client + "\n🔴 Jami qarz: " + fm(bal)
+    elif bal < 0:
+        txt = "👤 " + client + "\n🟢 Ortiqcha to'lov: " + fm(abs(bal))
+    else:
+        txt = "👤 " + client + "\n🟢 Qarz yo'q!"
+    await msg.reply_text(txt)
+
+
+async def grp_show_hisobot(ctx, chat, msg):
+    client = resolve_client_for_group(chat.id, chat.title)
+    if not client:
+        await msg.reply_text("⚠️ Bu guruh mijozga bog'lanmagan.\nAdmin «Mijoz: <ism>» deb yozsin.")
+        return
+    hist = get_client_history(client, 30)
+    if not hist:
+        await msg.reply_text("📭 Hali gul olinmagan.")
+        return
+    lines = ["🧾 " + client + " — hisoboti:\n"]
+    tot = 0
+    for h in hist:
+        lines.append(
+            fmt_date(h["date"]) + " — " + h["label"] + " " + str(h["quantity"])
+            + "x" + fmt_dot(h["price"]) + "=" + fmt_dot(h["total"])
+        )
+        tot += h["total"]
+    lines.append("\nJami: " + fmt_dot(tot))
+    await msg.reply_text("\n".join(lines))
 
 
 def client_from_title(title):
@@ -573,6 +623,15 @@ async def on_group_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if "bugungi gullar" in low:
+        await grp_show_flowers(ctx, chat, update.message)
+        return
+    if "hisobot" in low:
+        await grp_show_hisobot(ctx, chat, update.message)
+        return
+    if "jami qarz" in low or "qarzim" in low:
+        await grp_show_debt(ctx, chat, update.message)
+        return
     if low in ("menyu", "menu", "меню"):
         await show_group_menu(update)
         return
@@ -589,58 +648,14 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     chat = q.message.chat
 
-    # Guruh menyusi
+    # Guruh menyusi (eski inline tugmalar uchun ham ishlaydi)
     if data.startswith("g:"):
         if data == "g:stock":
-            flowers = get_active_flowers()
-            if not flowers:
-                await q.message.reply_text("📭 Bugungi gullar hali yo'q.")
-                return
-            for f in flowers:
-                cap = "🌸 Bugungi chiqgan gullar"
-                if f["caption"]:
-                    cap += "\n" + f["caption"]
-                try:
-                    await ctx.bot.send_photo(chat.id, f["file_id"], caption=cap)
-                except TelegramError:
-                    continue
-            return
-
-        client = resolve_client_for_group(chat.id, chat.title)
-        if not client:
-            await q.message.reply_text(
-                "⚠️ Bu guruh mijozga bog'lanmagan.\nAdmin «Mijoz: <ism>» deb yozsin."
-            )
-            return
-
-        if data == "g:debt":
-            d = get_client_balance(client)
-            bal = d["balance"]
-            if bal > 0:
-                txt = "👤 " + client + "\n🔴 Jami qarz: " + fm(bal)
-            elif bal < 0:
-                txt = "👤 " + client + "\n🟢 Ortiqcha to'lov: " + fm(abs(bal))
-            else:
-                txt = "👤 " + client + "\n🟢 Qarz yo'q!"
-            await q.message.reply_text(txt)
-            return
-
-        if data == "g:hist":
-            hist = get_client_history(client, 30)
-            if not hist:
-                await q.message.reply_text("📭 Hali gul olinmagan.")
-                return
-            lines = ["🧾 " + client + " — hisoboti:\n"]
-            tot = 0
-            for h in hist:
-                lines.append(
-                    fmt_date(h["date"]) + " — " + h["label"] + " " + str(h["quantity"])
-                    + "x" + fmt_dot(h["price"]) + "=" + fmt_dot(h["total"])
-                )
-                tot += h["total"]
-            lines.append("\nJami: " + fmt_dot(tot))
-            await q.message.reply_text("\n".join(lines))
-            return
+            await grp_show_flowers(ctx, chat, q.message)
+        elif data == "g:debt":
+            await grp_show_debt(ctx, chat, q.message)
+        elif data == "g:hist":
+            await grp_show_hisobot(ctx, chat, q.message)
         return
 
     # Eslatma yuborish (admin)
@@ -725,7 +740,8 @@ async def on_my_chat_member(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 "🌸 Salom! Men gul-savdo botiman.\n\n"
                 "Bu guruhni mijozga bog'lash uchun admin «Mijoz: <ism>» deb yozsin "
                 "(masalan: «Mijoz: Nigora opa»).\n\n"
-                "Menyu uchun «menyu» deb yozing.",
+                "Quyidagi menyudan foydalaning 👇",
+                reply_markup=client_menu_kb(),
             )
         except TelegramError:
             pass
