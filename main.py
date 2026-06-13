@@ -10,6 +10,7 @@ from database import (
     init_db, save_sale, save_payment, add_manual_debt,
     get_client_balance, get_daily_report,
     get_all_balances, get_all_clients, search_clients,
+    canonical_name, name_key,
     SOURCE_NAMES,
 )
 from parser import parse_message, parse_balance_command
@@ -43,12 +44,19 @@ def fm(n):
 
 
 def find_client(name):
-    matches = search_clients(name)
-    if matches:
-        return matches[0]
+    key = name_key(name)
     all_c = get_all_clients()
+    # 1) Aniq moslik: aka/oka/sof farqi e'tiborsiz
+    for cl in all_c:
+        if name_key(cl) == key:
+            return canonical_name(cl)
+    # 2) AI yordamida xato yozilgan ismni topadi, LEKIN magazin nomi
+    #    qo'shilgan boshqa mijozga ulab yubormaymiz: faqat so'z soni
+    #    teng bo'lsa qabul qilamiz ("Abdulhay" -> "Abdulhay aka Chorsu" EMAS)
     if all_c:
-        return ai_match_client(name, all_c)
+        m = ai_match_client(name, all_c)
+        if m and len(canonical_name(m).split()) == len(canonical_name(name).split()):
+            return canonical_name(m)
     return None
 
 
@@ -158,12 +166,7 @@ async def handle_sale(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     client_raw, rows = result
 
-    all_c = get_all_clients()
-    if all_c:
-        matched = ai_match_client(client_raw, all_c)
-        client_name = matched if matched else client_raw
-    else:
-        client_name = client_raw
+    client_name = find_client(client_raw) or canonical_name(client_raw)
 
     summary = {}
     grand_qty = 0
