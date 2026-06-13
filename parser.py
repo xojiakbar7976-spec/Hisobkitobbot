@@ -53,3 +53,42 @@ def parse_message(text: str) -> Optional[tuple]:
         return None
 
     return client_name, sale_rows
+
+
+def parse_balance_command(text: str) -> Optional[tuple]:
+    """'Abdulhay aka 500.000 qarz' / 'Abdulhay aka 500.000 kassa'
+    → (ism, summa, amal) qaytaradi. amal: 'qarz' yoki 'kassa'. Aks holda None."""
+    text = text.strip()
+    if "\n" in text:
+        return None
+
+    words = text.split()
+    if len(words) < 3:
+        return None
+
+    action = words[-1].lower()
+    if action not in ("qarz", "kassa"):
+        return None
+
+    rest = words[:-1]
+    amount_tokens = []
+    # oxiridan boshlab raqamli bo'laklarni yig'amiz (500.000 yoki 500 000)
+    while rest and re.fullmatch(r"[\d.,]+", rest[-1]):
+        amount_tokens.insert(0, rest.pop())
+
+    if not rest or not amount_tokens:
+        return None
+
+    try:
+        amount = _num("".join(amount_tokens))
+    except ValueError:
+        return None
+
+    if amount <= 0:
+        return None
+
+    name = " ".join(rest).strip()
+    if not name:
+        return None
+
+    return name, amount, action

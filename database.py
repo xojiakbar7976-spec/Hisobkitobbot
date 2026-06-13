@@ -69,6 +69,20 @@ def save_payment(client_name, amount, note=""):
     conn.close()
 
 
+def add_manual_debt(client_name, amount, note="Qarz"):
+    """Qo'lda qarz qo'shish: mijoz qarzini amount'ga oshiradi.
+    Kunlik gul hisobotiga kirmasligi uchun source='qarz' bilan saqlanadi."""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO sales (date,client_name,source,label,quantity,price,total) VALUES (%s,%s,%s,%s,%s,%s,%s)",
+        (str(date.today()), client_name, "qarz", note, 1, amount, amount)
+    )
+    conn.commit()
+    conn.close()
+    return amount
+
+
 def get_client_balance(client_name):
     conn = get_conn()
     c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -114,13 +128,13 @@ def get_daily_report(day=None):
     c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
     c.execute(
-        "SELECT source, SUM(quantity) as qty, SUM(total) as total FROM sales WHERE date=%s GROUP BY source",
+        "SELECT source, SUM(quantity) as qty, SUM(total) as total FROM sales WHERE date=%s AND source<>'qarz' GROUP BY source",
         (day,)
     )
     by_source = c.fetchall()
 
     c.execute(
-        "SELECT SUM(quantity) as qty, SUM(total) as total FROM sales WHERE date=%s",
+        "SELECT SUM(quantity) as qty, SUM(total) as total FROM sales WHERE date=%s AND source<>'qarz'",
         (day,)
     )
     totals = c.fetchone()
@@ -133,7 +147,7 @@ def get_recent_sales(limit=50):
     c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     c.execute(
         "SELECT date, client_name, source, label, quantity, price, total "
-        "FROM sales ORDER BY id DESC LIMIT %s",
+        "FROM sales WHERE source<>'qarz' ORDER BY id DESC LIMIT %s",
         (limit,)
     )
     rows = c.fetchall()

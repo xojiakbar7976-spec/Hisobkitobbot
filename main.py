@@ -7,12 +7,12 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes, ConversationHandler,
 )
 from database import (
-    init_db, save_sale, save_payment,
+    init_db, save_sale, save_payment, add_manual_debt,
     get_client_balance, get_daily_report,
     get_all_balances, get_all_clients, search_clients,
     SOURCE_NAMES,
 )
-from parser import parse_message
+from parser import parse_message, parse_balance_command
 from ai_helper import ai_match_client, ai_analyze_report, ai_client_advice
 
 TOKEN = os.environ.get("BOT_TOKEN", "")
@@ -62,6 +62,9 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "`Dala red 30x20.000`\n"
         "`A 75x6.000`\n"
         "`Mijoz ismi`\n\n"
+        "💰 *Qarz/kassa (qo'lda):*\n"
+        "`Abdulhay aka 500.000 qarz` — qarz qo'shish\n"
+        "`Abdulhay aka 500.000 kassa` — qarzdan ayirish\n\n"
         "📋 *Buyruqlar:*\n"
         "/hisobot — bugungi hisobot\n"
         "/qarz Doston aka — mijoz qarzi\n"
@@ -113,6 +116,30 @@ async def handle_sale(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "💡 Oxirgi qatorga mijoz ismini yozing.",
             parse_mode="Markdown",
         )
+        return
+
+    # Qo'lda qarz/kassa: "Abdulhay aka 500.000 qarz" / "Abdulhay aka 500.000 kassa"
+    bal_cmd = parse_balance_command(text)
+    if bal_cmd:
+        name_raw, amount, action = bal_cmd
+        found = find_client(name_raw) or name_raw
+        if action == "qarz":
+            add_manual_debt(found, amount)
+            head = "➕ *" + found + "* qarziga *" + fm(amount) + "* qo'shildi."
+        else:
+            save_payment(found, amount, "kassa")
+            head = "💵 *" + found + "* — *" + fm(amount) + "* kassaga olindi (qarzdan ayirildi)."
+
+        d = get_client_balance(found)
+        bal = d["balance"]
+        if bal > 0:
+            bal_line = "🔴 Qoldiq qarz: *" + fm(bal) + "*"
+        elif bal < 0:
+            bal_line = "🟢 Ortiqcha to'lagan: *" + fm(abs(bal)) + "*"
+        else:
+            bal_line = "🟢 *Qarz yo'q!*"
+
+        await update.message.reply_text(head + "\n" + bal_line, parse_mode="Markdown")
         return
 
     result = parse_message(text)
