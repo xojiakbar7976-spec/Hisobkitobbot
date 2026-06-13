@@ -3,7 +3,7 @@ import logging
 import threading
 from datetime import date
 from telegram import (
-    Update, ReplyKeyboardMarkup,
+    Update, ReplyKeyboardMarkup, ReplyKeyboardRemove,
     InlineKeyboardMarkup, InlineKeyboardButton,
 )
 from telegram.ext import (
@@ -115,10 +115,24 @@ def capture_admin_if_needed(update: Update) -> None:
 
 def group_menu_kb():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("💰 Jami qarzi", callback_data="g:debt")],
-        [InlineKeyboardButton("🌷 Olgan gullari", callback_data="g:hist")],
-        [InlineKeyboardButton("🌸 В наличии", callback_data="g:stock")],
+        [InlineKeyboardButton("🌸 Bugungi gullar", callback_data="g:stock")],
+        [InlineKeyboardButton("🧾 Hisobot", callback_data="g:hist")],
+        [InlineKeyboardButton("💰 Jami qarzim", callback_data="g:debt")],
     ])
+
+
+async def show_group_menu(update: Update):
+    chat = update.effective_chat
+    if chat:
+        record_group(chat.id, chat.title)
+    # Admin reply-klaviaturasi guruhda qolib ketgan bo'lsa — olib tashlaymiz
+    try:
+        await update.message.reply_text("🌸 Mijoz menyusi", reply_markup=ReplyKeyboardRemove())
+    except TelegramError:
+        pass
+    await update.message.reply_text(
+        "Kerakli bo'limni tanlang 👇", reply_markup=group_menu_kb()
+    )
 
 
 def client_from_title(title):
@@ -152,6 +166,20 @@ def build_group_sale_text(client_name, rows, grand_total, balance):
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     capture_admin_if_needed(update)
+    chat = update.effective_chat
+
+    # Guruhda — faqat klient menyusi (admin tugmalari ko'rsatilmaydi)
+    if chat and chat.type in ("group", "supergroup"):
+        await show_group_menu(update)
+        return
+
+    # Shaxsiy chat: admin bo'lmaganlarga admin menyusi berilmaydi
+    if not is_admin(update):
+        await update.message.reply_text(
+            "🌸 Salom! Bu — gul-savdo boti. Mijoz menyusi o'z guruhingizda mavjud."
+        )
+        return
+
     await update.message.reply_text(
         "🌸 *Gul Savdo Boti*\n\n"
         "📌 *Sotuv kiritish:*\n"
@@ -546,16 +574,13 @@ async def on_group_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     if low in ("menyu", "menu", "меню"):
-        await update.message.reply_text("🌸 Menyu — bo'limni tanlang:", reply_markup=group_menu_kb())
+        await show_group_menu(update)
         return
     # Boshqa guruh xabarlari e'tiborsiz qoldiriladi (sotuv sifatida olinmaydi)
 
 
 async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    chat = update.effective_chat
-    if chat:
-        record_group(chat.id, chat.title)
-    await update.message.reply_text("🌸 Menyu — bo'limni tanlang:", reply_markup=group_menu_kb())
+    await show_group_menu(update)
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -605,7 +630,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             if not hist:
                 await q.message.reply_text("📭 Hali gul olinmagan.")
                 return
-            lines = ["🌷 " + client + " — olgan gullari:\n"]
+            lines = ["🧾 " + client + " — hisoboti:\n"]
             tot = 0
             for h in hist:
                 lines.append(
