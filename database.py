@@ -9,6 +9,7 @@ SOURCE_NAMES = {
     "A": "Alisher aka",
     "N": "Nazarbek",
     "dala": "Dala",
+    "?": "Boshqa",
 }
 
 

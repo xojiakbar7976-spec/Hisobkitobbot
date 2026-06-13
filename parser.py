@@ -1,30 +1,25 @@
 import re
 from typing import Optional
 
+# "son x narx" namunasi: 50x2000, 150 x 3000, 30×12000
+_CALC = re.compile(r'(\d[\d.,]*)\s*[xX\xd7]\s*(\d[\d.,]*)')
+
 
 def _num(s: str) -> int:
     return int(s.replace(".", "").replace(",", "").replace(" ", ""))
 
 
-_ROW = re.compile(
-    r'^'
-    r'(A|N(?:\s+\S+)?|[Dd][Aa][Ll][Aa](?:\s+\S+)?)'
-    r'\s+'
-    r'(\d[\d.,]*)'
-    r'\s*[xX\xd7]\s*'
-    r'(\d[\d.,]*)'
-    r'\s*$'
-)
-
-
-def _source_key(raw: str) -> str:
-    upper = raw.strip().upper()
-    if upper == "A":
+def _source_key(line: str) -> str:
+    parts = line.strip().split()
+    if not parts:
+        return "?"
+    first = parts[0].upper()
+    if first == "A":
         return "A"
-    if upper.startswith("N"):
-        return "N"
-    if upper.startswith("D"):
+    if first.startswith("DALA") or first == "D":
         return "dala"
+    if first[0] == "N":
+        return "N"
     return "?"
 
 
@@ -37,20 +32,22 @@ def parse_message(text: str) -> Optional[tuple]:
     non_sale = []
 
     for line in lines:
-        m = _ROW.match(line)
-        if m:
-            raw_src = m.group(1).strip()
-            qty = _num(m.group(2))
-            price = _num(m.group(3))
-            source = _source_key(raw_src)
-            label = raw_src
+        calcs = list(_CALC.finditer(line))
+        if calcs:
+            last = calcs[-1]  # hisob-kitob odatda satr oxirida bo'ladi
+            qty = _num(last.group(1))
+            price = _num(last.group(2))
+            source = _source_key(line)
+            label = line[:last.start()].strip() or line
             sale_rows.append((source, label, qty, price))
         else:
+            # "x" yo'q satr — ortiqcha yozuv, o'tkazib yuboriladi
             non_sale.append(line)
 
     if not sale_rows:
         return None
 
+    # oxirgi "x"siz satr — mijoz ismi
     client_name = non_sale[-1] if non_sale else None
     if not client_name:
         return None

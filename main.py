@@ -154,7 +154,7 @@ async def handle_sale(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     lines = ["✅ *" + client_name + "* — kiritildi!\n"]
     for src, d in summary.items():
-        lines.append("🌿 *" + SOURCE_NAMES[src] + ":* " + str(d["qty"]) + " dona = " + fm(d["total"]))
+        lines.append("🌿 *" + SOURCE_NAMES.get(src, src) + ":* " + str(d["qty"]) + " dona = " + fm(d["total"]))
     lines.append("\n📦 *Jami:* " + str(grand_qty) + " dona = " + fm(grand_total))
     lines.append("💳 Qarzga qo'shildi: *" + fm(grand_total) + "*")
 
